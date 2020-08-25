@@ -1,0 +1,184 @@
+#Preliminary Data Manipulation
+library(Seurat)
+library(data.table)
+library(vroom)
+library(fgsea)
+library(ggplot2)
+library(tidyverse)
+library(msigdbr)
+library(VennDiagram)
+mat <- vroom("/data/exprMatrix.tsv")
+meta <- read.table("meta.tsv", header=T, sep="\t", as.is=T, row.names=1)
+cellnames <- rownames(meta)
+cellnames <- lapply(cellnames, function(x) {gsub("-", ".", x)})
+rownames(meta) <- cellnames
+
+meta[, "Group"] <- "Other"
+meta[grepl(pattern = "Xiang 1m rep1", meta$Dataset), "Group"] <- "Xiang1m"
+meta[grepl(pattern = "Xiang 1m rep2", meta$Dataset), "Group"] <- "Xiang1m"
+meta[grepl(pattern = "Xiang 2m rep1", meta$Dataset), "Group"] <- "Xiang2m"
+meta[grepl(pattern = "Xiang 2m rep2", meta$Dataset), "Group"] <- "Xiang2m"
+meta[grepl(pattern = "Madhavan 10w", meta$Dataset), "Group"] <- "Madhavan10w"
+meta[grepl(pattern = "Fiddes 5w rep1", meta$Dataset), "Group"] <- "Fiddes5w"
+meta[grepl(pattern = "Fiddes 5w rep2", meta$Dataset), "Group"] <- "Fiddes5w"
+meta[grepl(pattern = "Fetal_GW23", rownames(meta)), "Group"] <- "Fetal"
+meta[grepl(pattern = "Fetal_GW26", rownames(meta)), "Group"] <- "Fetal"
+
+meta[grepl(pattern = "Quadrato 3m rep1", meta$Dataset), "Group"] <- "Quadrato3m"
+meta[grepl(pattern = "Quadrato 3m rep2", meta$Dataset), "Group"] <- "Quadrato3m"
+meta[grepl(pattern = "Quadrato 6m rep1", meta$Dataset), "Group"] <- "Quadrato6m"
+meta[grepl(pattern = "Quadrato 6m rep2", meta$Dataset), "Group"] <- "Quadrato6m"
+meta[grepl(pattern = "Quadrato 6m rep3", meta$Dataset), "Group"] <- "Quadrato6m"
+meta[grepl(pattern = "Quadrato 6m rep4", meta$Dataset), "Group"] <- "Quadrato6m"
+meta[grepl(pattern = "Birey 3m", meta$Dataset), "Group"] <- "Birey3m"
+meta[grepl(pattern = "Birey 3m", meta$Dataset), "Group"] <- "Birey3m"
+meta[grepl(pattern = "Trujillo 6m rep1", meta$Dataset), "Group"] <- "Trujillo6m"
+meta[grepl(pattern = "Trujillo 6m rep2", meta$Dataset), "Group"] <- "Trujillo6m"
+meta[grepl(pattern = "Giandomenico 3m rep1", meta$Dataset), "Group"] <- "Giandomenico3m"
+meta[grepl(pattern = "Giandomenico 3m rep2", meta$Dataset), "Group"] <- "Giandomenico3m"
+meta[grepl(pattern = "Giandomenico 3m rep3", meta$Dataset), "Group"] <- "Giandomenico3m"
+meta[grepl(pattern = "Velasco 3m rep1", meta$Dataset), "Group"] <- "Velasco3m"
+meta[grepl(pattern = "Velasco 3m rep2", meta$Dataset), "Group"] <- "Velasco3m"
+meta[grepl(pattern = "Velasco 6m rep1", meta$Dataset), "Group"] <- "Velasco6m"
+meta[grepl(pattern = "Velasco 6m rep2", meta$Dataset), "Group"] <- "Velasco6m"
+
+genes = mat[,1][[1]]
+genes = gsub(".+[|]", "", genes)
+mat = data.frame(mat[,-1], row.names=genes)
+so <- CreateSeuratObject(counts = mat, project = "organoidData", meta.data=meta)
+saveRDS(so, "/data/organoids.RDS", compress = F)
+
+so <- readRDS("/data/organoids.RDS")
+
+#PCA Code
+so = FindVariableFeatures(so)
+so = ScaleData(so)  
+so <- RunPCA(so)
+#ElbowPlot(so)
+
+#Recreation of UMAPS from Tanaka et al.
+so <- RunUMAP(so, dims = 1:10)
+UMAPPlot(so, group.by = "Cluster_name", label = TRUE)
+UMAPPlot(so, group.by = "Protocol", cells.highlight = CellsByIdentities(so, "Xiang"), pt.size = 0.002)
+
+#Differential Gene Expression Code
+EarlyMarkerGenes <- FindMarkers(so, group.by = "Group", ident.1 = c("Madhavan10w", "Xiang1m", "Xiang2m", 
+      "Fiddes5w"), ident.2 = "Fetal")
+write.csv(MarkerGenes, "MarkerGenesAllProtocols.csv")
+
+LateMarkerGenes <- FindMarkers(so, group.by = "Group", ident.1 = c("Quadrato3m", "Quadrato6m", "Birey3m", 
+      "Trujillo6m", "Velasco3m", "Velasco6m"), ident.2 = "Fetal")
+write.csv(MarkerGenes, "LateMaturationMarkers.csv")
+
+Madhavan10wMarkers <- rownames(FindMarkers(so, group.by = "Group", ident.1 = "Madhavan10w", 
+      ident.2 = "Fetal"))[1:31]
+Xiang1mMarkers <- rownames(FindMarkers(so, group.by = "Group", ident.1 = "Xiang1m", 
+      ident.2 = "Fetal"))[1:246]
+Xiang2mMarkers <- rownames(FindMarkers(so, group.by = "Group", ident.1 = "Xiang2m", 
+      ident.2 = "Fetal"))[1:194]
+Fiddes5wMarkers <- rownames(FindMarkers(so, group.by = "Group", ident.1 = "Fiddes5w", 
+      ident.2 = "Fetal"))[1:132]
+
+#Venn Diagram Code
+colors <- c("#6b7fff", "#c3db0f", "#ff4059", "#de4dff")
+venn.diagram(x = list(Madhavan10wMarkers, Xiang1mMarkers, Xiang2mMarkers, Fiddes5wMarkers),
+             category.names = c("Madhavan 10w", "Xiang 1m", "Xiang2m", "Fiddes 5w"),
+             filename = "VennDiagram.png", output = T, impagetype = "png", scaled = F, 
+             col = "black", fill = colors, cat.col = colors, cat.cex = 1, margin = 0.15)
+
+#GSEA Code
+Marker2 <- data.frame(rownames(MarkerGenes))
+Marker2[,2] <- MarkerGenes$avg_logFC
+Marker2 <- Marker2 %>% 
+   rename(GeneNames = rownames.MarkerGenes.,
+          LogFC = V2)
+ranks <- deframe(Marker2)
+m_df = msigdbr(species = "Homo sapiens", category = "H")
+m_list = m_df %>% split(x = .$gene_symbol, f = .$gs_name)
+fgseaRes <- fgsea(pathways=m_list, stats=ranks, nperm = 1000, gseaParam = 1000)
+fgseaResTidy <- fgseaRes %>%
+   as_tibble() %>%
+   arrange(desc(NES))
+ggplot(fgseaResTidy, aes(reorder(pathway, NES), NES)) +
+   geom_col(aes(fill=padj<0.05)) +
+   coord_flip() +
+   labs(x="Pathway", y="Normalized Enrichment Score") + 
+   theme_minimal()
+
+Input <- read.table("MarkerGenesAllProtocols.csv", header=T, sep=",")
+Input <- Input[1:177,1:2]
+ranks2 <- deframe(Input)
+GeneSetData <- read.table("DiseaseGeneList.csv", header=F, sep=",", as.is=T)
+rownames(GeneSetData) <- GeneSetData[,1]
+GeneSetData = GeneSetData[,2:386]
+GeneSetList <- as.data.frame(t(GeneSetData))
+GeneSetList <- lapply(GeneSetList, na.omit)
+GeneSetList <- lapply(GeneSetList, c)
+fgseaRes <- fgsea(pathways=GeneSetList, stats=ranks2, nperm = 1000, gseaParam = 0.5)
+fgseaResTidy <- fgseaRes %>%
+   as_tibble() %>%
+   arrange(desc(NES))
+fgseaResTidy <- fgseaResTidy[order(fgseaResTidy$pval),]
+fgseaResTidy <- fgseaResTidy[1:19,]
+
+ggplot(fgseaResTidy, aes(reorder(pathway, NES), NES)) +
+   geom_col(aes(fill=padj<0.05)) +
+   coord_flip() +
+   labs(x="Pathway", y="Normalized Enrichment Score") + 
+   theme_minimal() + 
+   ggtitle("Enriched Gene Sets, All Protocols") + 
+   theme(plot.title = element_text(hjust = 0.3, size = 17),
+         axis.text=element_text(size=12))
+
+plotEnrichment(GeneSetList[["movement disease DOID:863 (3)"]], ranks2)
+
+write.csv(fgseaResTidy, 'GSEAoutput.csv')
+fgseaResTidy <- read.table("GSEAoutput.csv", header=T, sep=",")
+
+fgseaResTidy <- fgseaResTidy[order(fgseaResTidy$pval),]
+fgseaResTidy <- fgseaResTidy[1:11,]
+ggplot(fgseaResTidy, aes(reorder(pathway, NES), NES)) +
+   geom_col(aes(fill=padj<0.05)) +
+   coord_flip() +
+   labs(x="Pathway", y="Normalized Enrichment Score") + 
+   theme_minimal() + 
+   ggtitle("Enriched Gene Sets, Xiang Protocol (1 Month)") + 
+   theme(plot.title = element_text(hjust = 0.3, size = 17),
+         axis.text=element_text(size=14))
+
+write.csv(fgseaResTidy, 'GSEAoutput.csv')
+fgseaResTidy <- read.table("GSEAoutputXiang1.csv", header=T, sep=",")
+
+#Data Plotting and Visualization Code
+so <- SetIdent(so, value = so@meta.data$Group)
+featureList1 <- c("MEF2C", "FOXG1", "ZIC1", "FDFT1")
+featureList2 <- c("MEF2C", "PAK3", "TSPAN7", "CAMK2B", "FDFT1", "STMN2", "GAD1", "DCX", "TUBA1A", 
+      "GNAO1", "NTRK2", "SCN2A", "PRDX1", "SYT1", "NPC2", "TUBB2A", "TUBB2B", "KIF5C", "NFIA", "NRXN1",
+      "MAP1B", "TTC9B", "MASP1", "CDC42", "VAMP2", "GRIA2", "TGIF1")
+
+#Violin Plot
+VlnPlot(so, features = featureList1, pt.size = 0.001, combine = TRUE, ncol = 2, 
+      idents = c("Madhavan10w", "Fetal"))
+
+#Heatmap - All Cells
+Scaled <- ScaleData(so, features = featureList1)
+Scaled <- SetIdent(Scaled, value = Scaled@meta.data$Group)
+cellsused <- c(rownames(meta[grepl(pattern = "Madhavan10w", meta$Group),]),
+      rownames(meta[grepl(pattern = "Fetal", meta$Group),]))
+heatmap <- DoHeatmap(Scaled, group.by = "ident", features = featureList1, label = F) + 
+      scale_fill_gradientn(colors = c("blue", "white", "red"))
+ggplot2::ggsave(filename = "MadhavanHeatmap.pdf", plot = heatmap)
+
+#Heatmap - Cluster Averages
+cluster.averages <- AverageExpression(so, return.seurat = TRUE)
+cluster.averages@active.ident <- factor(x = cluster.averages@active.ident, levels = c("Xiang1m", 
+      "Fiddes5w", "Xiang2m", "Madhavan10w", "Fetal"), ordered = T)
+heatmap <- DoHeatmap(cluster.averages, features = featureList2, draw.lines = FALSE,
+      label = F) +  scale_fill_gradientn(colors = c("blue", "white", "red"))
+ggplot2::ggsave(filename = "AllProtocolsHeatmap.pdf", plot = heatmap)
+
+#Dot Plot
+so@active.ident <- factor(x = so@active.ident, levels = c("Other", "Xiang1m", "Fiddes5w", "Xiang2m", 
+      "Madhavan10w", "Fetal"), ordered = T)
+DotPlot(object = so, features = featureList2, idents = c("Fetal", "Fiddes5w", "Xiang1m", "Xiang2m", 
+      "Madhavan10w"), cols = c("blue", "red")) + RotatedAxis()
