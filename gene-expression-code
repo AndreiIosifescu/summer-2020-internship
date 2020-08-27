@@ -1,3 +1,5 @@
+#Project: A Comparison of Gene Expression in Brain Organoids and Developing Fetal Brains
+
 #Preliminary Data Manipulation
 library(Seurat)
 library(data.table)
