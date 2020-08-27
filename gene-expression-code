@@ -1,4 +1,11 @@
-#Project: A Comparison of Gene Expression in Brain Organoids and Developing Fetal Brains
+Project: A Comparison of Gene Expression in Brain Organoids and Developing Fetal Brains
+
+Code Includes:
+- Data Importation from the UCSC Cell Browser
+- Recreation of UMAP plots from Tanaka et al., 2020
+- Differentially Expressed Gene (DEG) Analysis (comparing fetal brain data with each of the 4 protocols in the early maturation period separately, and all 4 protocols combined)
+- Gene Set Enrichment Analysis (using disorder-related gene sets from OMIM)
+- Various graphs, plots, and other forms of data visualization (heatmaps, violin plots, dot plots, venn diagrams)
 
 #Preliminary Data Manipulation
 library(Seurat)
