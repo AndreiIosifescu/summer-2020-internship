@@ -7,6 +7,8 @@ Code Includes:
 - Gene Set Enrichment Analysis (using disorder-related gene sets from OMIM)
 - Various graphs, plots, and other forms of data visualization (heatmaps, violin plots, dot plots, venn diagrams)
 
+***
+
 #Preliminary Data Manipulation
 library(Seurat)
 library(data.table)
